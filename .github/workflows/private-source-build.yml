@@ -1,0 +1,68 @@
+name: private-source-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        description: "SOURCE_REPO in owner/name format"
+        required: true
+        type: string
+      source_ref:
+        description: "Git ref/commit of SOURCE_REPO"
+        required: true
+        type: string
+      artifact_name:
+        description: "Artifact name"
+        required: true
+        type: string
+      artifact_path:
+        description: "Path to upload from SOURCE_REPO workspace"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout build repo
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key for SOURCE_REPO
+        shell: bash
+        env:
+          SOURCE_REPO_SSH_KEY: ${{ secrets.SOURCE_REPO_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SOURCE_REPO_SSH_KEY" > ~/.ssh/id_source_repo
+          chmod 600 ~/.ssh/id_source_repo
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Clone private SOURCE_REPO by SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone "git@github.com:${{ inputs.source_repo }}.git" source
+          cd source
+          git fetch --depth=1 origin "${{ inputs.source_ref }}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Run SOURCE_REPO build entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x source/tool/ci/build-entry.sh
+          source/tool/ci/build-entry.sh
+
+      - name: Upload artifact (retention 1 day)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: source/${{ inputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 1
