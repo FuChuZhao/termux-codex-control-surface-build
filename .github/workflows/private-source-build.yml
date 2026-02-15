@@ -47,6 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_source_repo -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
           git clone "git@github.com:${{ inputs.source_repo }}.git" source
           cd source
           git fetch --depth=1 origin "${{ inputs.source_ref }}"
